@@ -81,14 +81,14 @@ func run() {
 	log.Error("test err")
 	cfg = config.Config()
 	influx_server = stats2influx.InfluxServer{InfluxURI: cfg.Influxdb_Url, InfluxOrg: cfg.Influxdb_Org, InfluxToken: cfg.Influxdb_Token, InfluxBucket: cfg.Influxdb_Bucket}
-	sleeper := time.NewTicker(time.Second * time.Duration(cfg.Interval))
+	sleeper := time.NewTicker(time.Second * time.Duration(cfg.Update_Interval))
 	for {
 		_, err := stat_to_file()
 		if err != nil {
 
 		} else {
 			count, _ := files_to_influx()
-			f_ := log.Fields{"sleep": cfg.Interval, "count": count}
+			f_ := log.Fields{"sleep": cfg.Update_Interval, "count": count}
 			log.WithFields(f_).Info("stats saved to influx")
 		}
 		<-sleeper.C

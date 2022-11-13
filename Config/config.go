@@ -16,7 +16,7 @@ type SettingsType struct {
 	Influxdb_Token    string `env:"INFLUXDB_TOKEN" env-required:"true"`
 	Influxdb_Bucket   string `env:"INFLUXDB_BUCKET" env-required:"true"`
 	Checkpoint_Path   string `env:"CHECKPOINT_PATH" env-default:"./storage/checkpoints"`
-	Interval          int    `env:"Interval" env-default:"5"`
+	Update_Interval   int    `env:"UPDATE_INTERVAL" env-default:"5"`
 	Log_Level         string `env:"LOG_LEVEL" env-default:"warning"`
 }
 
