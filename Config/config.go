@@ -36,7 +36,7 @@ func Config() SettingsType {
 	log.WithField("data", fmt.Sprintf("%+v", cfg)).Debug("Parsed Configuration")
 	err = os.MkdirAll(cfg.Checkpoint_Path, os.ModePerm)
 	if err != nil {
-		log.WithError(err).Fatal("can not create checkpoint dir")
+		log.WithError(err).Panic("can not create checkpoint dir")
 	}
 	return cfg
 }
@@ -44,7 +44,7 @@ func Describe() {
 	var cfg SettingsType
 	help, err := cleanenv.GetDescription(&cfg, nil)
 	if err != nil {
-		log.WithError(err).Fatal("can not generate description")
+		log.WithError(err).Panic("can not generate description")
 	}
 	log.Println(help)
 }

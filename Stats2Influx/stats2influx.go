@@ -13,6 +13,9 @@ import (
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 )
 
+// ==================================
+// types
+// ==================================
 type InfluxServer struct {
 	InfluxURI    string
 	InfluxToken  string
@@ -20,6 +23,9 @@ type InfluxServer struct {
 	InfluxBucket string
 }
 
+// ==================================
+// functions
+// ==================================
 func Write(server InfluxServer, points grpc2stats.Stats) (int, bool) {
 	client := influxdb2.NewClient(server.InfluxURI, server.InfluxToken)
 	defer client.Close()
