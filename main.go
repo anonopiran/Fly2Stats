@@ -4,12 +4,15 @@ import (
 	config "Fly2Stats/Config"
 	grpc2stats "Fly2Stats/Grpc2Stats"
 	stats2influx "Fly2Stats/Stats2Influx"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,55 +23,82 @@ var cfg config.SettingsType
 var influx_server stats2influx.InfluxServer
 var panic_file_name string
 
-func panic_file(err error) error {
+func resolve_v2fly() []grpc2stats.ServerType {
+	servers := []grpc2stats.ServerType{}
+	for _, srv := range cfg.V2fly_Api_Address {
+		x := strings.Split(srv, ":")
+		host := x[0]
+		port, err := strconv.ParseInt(x[1], 10, 0)
+		if err != nil {
+			log.WithError(err).Panicf("can not parse port %s", srv)
+		}
+		ips, err := net.DefaultResolver.LookupIP(context.Background(), "ip4", host)
+		if err != nil {
+			log.WithError(err).Errorf("can not resolve host %s. skiping...", host)
+			continue
+		}
+		for _, ip_ := range ips {
+			servers = append(servers, grpc2stats.ServerType{Ip: ip_, Uri: host, Port: port})
+		}
+	}
+	log.Infof("discovered %d services", len(servers))
+	log.Debugf("%v", servers)
+	return servers
+}
+func panic_file(panpan bool, nolog bool, err error) {
 	f, _err := os.Create(panic_file_name)
+	var e_ func(string, ...interface{})
+	if panpan {
+		e_ = log.WithError(_err).Panicf
+	} else {
+		e_ = log.WithError(_err).Errorf
+	}
 	if _err != nil {
-		log.WithError(_err).Errorf("can not open panic file at %s", panic_file_name)
-		return _err
+		log.WithError(_err).Panicf("can not open panic file at %s", panic_file_name)
 	}
 	defer f.Close()
 	f.WriteString(err.Error())
-	return nil
+	if !nolog {
+		e_(err.Error())
+
+	}
 }
-func stat_to_file() (string, error) {
+func stat_to_file() {
 	if _, err := os.Stat(panic_file_name); err == nil {
 		log.Panicf("panic file exists at %s", panic_file_name)
 	}
-	err := panic_file(errors.New("test"))
-	if err != nil {
-		log.WithError(err).Panicf("can not open test panic file at %s", panic_file_name)
-	}
-	err = os.Remove(panic_file_name)
+	panic_file(false, true, errors.New("test"))
+	err := os.Remove(panic_file_name)
 	if err != nil {
 		log.WithError(err).Panicf("can not remove test panic file at %s", panic_file_name)
 	}
-	stats, err := grpc2stats.ReadStats(cfg.V2fly_Api_Address, true)
-	if err != nil {
-		log.WithError(err).Error("error reading stats from v2fly")
-		return "", err
+	for _, srv_ := range resolve_v2fly() {
+		stats, err := grpc2stats.ReadStats(srv_, true)
+		log_ := log.WithField("server", srv_)
+		if err != nil {
+			log_.WithError(err).Error("error reading stats from v2fly")
+			continue
+		}
+		if len(stats) == 0 {
+			log_.Info("nothing to write")
+			continue
+		}
+		file_name := filepath.Join(cfg.Checkpoint_Path, fmt.Sprintf("checkpoint-%v-%s-%s.json", time.Now().Unix(), srv_.Uri, srv_.Ip))
+		f, err := os.Create(file_name)
+		if err != nil {
+			panic_file(true, false, err)
+		}
+		defer f.Close()
+		jstats, err := json.Marshal(stats)
+		if err != nil {
+			panic_file(true, false, err)
+		}
+		_, err = f.Write(jstats)
+		if err != nil {
+			panic_file(true, false, err)
+		}
+		log_.Infof("write %d records to file", len(stats))
 	}
-	if len(stats) == 0 {
-		log.Info("nothing to write")
-		return "", nil
-	}
-	file_name := filepath.Join(cfg.Checkpoint_Path, fmt.Sprintf("checkpoint-%v.json", time.Now().Unix()))
-	f, err := os.Create(file_name)
-	if err != nil {
-		panic_file(err)
-		log.WithError(err).Panicf("can not open the file %s", file_name)
-	}
-	defer f.Close()
-	jstats, err := json.Marshal(stats)
-	if err != nil {
-		panic_file(err)
-		log.WithField("stats", fmt.Sprintf("%v+", stats)).WithError(err).Panic("error converting stats to json")
-	}
-	_, err = f.Write(jstats)
-	if err != nil {
-		panic_file(err)
-		log.WithField("json stats", string(jstats)).WithError(err).Panicf("error saving data to %s", file_name)
-	}
-	return file_name, nil
 }
 func files_to_influx() (int, error) {
 	files, err := os.ReadDir(cfg.Checkpoint_Path)
@@ -87,7 +117,7 @@ func files_to_influx() (int, error) {
 			log.WithError(err).Errorf("can not read json file at %s\n", f_path)
 			continue
 		}
-		f_data := *new(grpc2stats.Stats)
+		f_data := *new(grpc2stats.UserStatListTypes)
 		err = json.Unmarshal(f_file, &f_data)
 		if err != nil {
 			log.WithError(err).Error("can not parse json file at %s\n", f_path)
@@ -114,13 +144,10 @@ func run() {
 	influx_server = stats2influx.InfluxServer{InfluxURI: cfg.Influxdb_Url, InfluxOrg: cfg.Influxdb_Org, InfluxToken: cfg.Influxdb_Token, InfluxBucket: cfg.Influxdb_Bucket, InfluxTags: cfg.Influxdb_Tags}
 	sleeper := time.NewTicker(time.Second * time.Duration(cfg.Update_Interval))
 	for {
-		_, err := stat_to_file()
-		if err != nil {
-		} else {
-			count, _ := files_to_influx()
-			f_ := log.Fields{"sleep": cfg.Update_Interval, "count": count}
-			log.WithFields(f_).Info("stats saved to influx")
-		}
+		stat_to_file()
+		count, _ := files_to_influx()
+		f_ := log.Fields{"sleep": cfg.Update_Interval, "count": count}
+		log.WithFields(f_).Info("stats saved to influx")
 		<-sleeper.C
 	}
 }

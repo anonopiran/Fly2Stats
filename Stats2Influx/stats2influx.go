@@ -25,14 +25,14 @@ type InfluxServer struct {
 // ==================================
 // functions
 // ==================================
-func Write(server InfluxServer, points grpc2stats.Stats) (int, error) {
+func Write(server InfluxServer, points grpc2stats.UserStatListTypes) (int, error) {
 	client := influxdb2.NewClient(server.InfluxURI, server.InfluxToken)
 	defer client.Close()
 	writeAPI := client.WriteAPIBlocking(server.InfluxOrg, server.InfluxBucket)
 	writeAPI.EnableBatching()
 	count := 0
 	for _, v_ := range points {
-		tags := map[string]string{"user": v_.Username, "direction": string(v_.Direction)}
+		tags := map[string]string{"user": v_.Username, "direction": string(v_.Direction), "server_url": v_.ServerUri, "server_ip": v_.ServerIp}
 		for k_, v_ := range server.InfluxTags {
 			tags[k_] = v_
 		}

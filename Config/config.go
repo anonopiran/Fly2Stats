@@ -9,7 +9,7 @@ import (
 )
 
 type SettingsType struct {
-	V2fly_Api_Address string            `env:"V2FLY_API_ADDRESS" env-required:"true"`
+	V2fly_Api_Address []string          `env:"V2FLY_API_ADDRESS" env-required:"true"`
 	Influxdb_Url      string            `env:"INFLUXDB_URL" env-required:"true"`
 	Influxdb_Org      string            `env:"INFLUXDB_ORG" env-required:"true"`
 	Influxdb_Token    string            `env:"INFLUXDB_TOKEN" env-required:"true"`
@@ -22,7 +22,6 @@ type SettingsType struct {
 
 func Config() SettingsType {
 	var cfg SettingsType
-	// load_dot_env()
 	var err error = nil
 	if _, err = os.Stat(".env"); err == nil {
 		err = cleanenv.ReadConfig(".env", &cfg)

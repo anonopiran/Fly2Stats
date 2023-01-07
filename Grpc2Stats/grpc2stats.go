@@ -7,6 +7,8 @@ import (
 
 	"regexp"
 
+	"net"
+
 	"github.com/v2fly/v2ray-core/v5/app/stats/command"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -17,27 +19,35 @@ import (
 // ==================================
 // types
 // ==================================
-type Direction string
+type DirectionType string
 
 const (
-	Downlink Direction = "downlink"
-	Uplink   Direction = "uplink"
+	Downlink DirectionType = "downlink"
+	Uplink   DirectionType = "uplink"
 )
 
-type UserStat struct {
+type ServerType struct {
+	Uri  string
+	Ip   net.IP
+	Port int64
+}
+type UserStatType struct {
 	Username  string
 	Time      int64
-	Direction Direction
+	Direction DirectionType
 	Value     int64
+	ServerUri string
+	ServerIp  string
 }
-type Stats []UserStat
+
+type UserStatListTypes []UserStatType
 
 // ==================================
 // functions
 // ==================================
-func query_stats(server string, reset bool) (*command.QueryStatsResponse, error) {
+func query_stats(server ServerType, reset bool) (*command.QueryStatsResponse, error) {
 	opt := grpc.WithTransportCredentials(insecure.NewCredentials())
-	conn, err := grpc.Dial(server, opt)
+	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", server.Ip, server.Port), opt)
 	if err != nil {
 		log.WithError(err).Error("fail to dial grpc server")
 		return nil, err
@@ -55,9 +65,9 @@ func query_stats(server string, reset bool) (*command.QueryStatsResponse, error)
 	log.WithField("data", r).Debugln("read v2fly stats")
 	return r, nil
 }
-func parse_stats(r *command.QueryStatsResponse) Stats {
+func parse_stats(server ServerType, r *command.QueryStatsResponse) UserStatListTypes {
 	ct := time.Now().Unix()
-	stats := *new(Stats)
+	stats := *new(UserStatListTypes)
 	reg, _ := regexp.Compile("^.+>>>(.+?)>>>.+>>>(.+)$")
 	for _, s_ := range r.Stat {
 		usage := s_.Value
@@ -65,19 +75,19 @@ func parse_stats(r *command.QueryStatsResponse) Stats {
 			continue
 		}
 		reg_res := reg.FindStringSubmatch(s_.Name)
-		u_ := reg_res[1]            // user email
-		t_ := Direction(reg_res[2]) // usage direction
-		entry := UserStat{Time: ct, Username: u_, Direction: t_, Value: usage}
+		u_ := reg_res[1]                // user email
+		t_ := DirectionType(reg_res[2]) // usage direction
+		entry := UserStatType{Time: ct, Username: u_, Direction: t_, Value: usage, ServerUri: server.Uri, ServerIp: server.Ip.String()}
 		stats = append(stats, entry)
 	}
 	log.WithField("data", fmt.Sprintf("%+v", stats)).Debug("parse user stat")
 	return stats
 }
-func ReadStats(server string, reset bool) (Stats, error) {
+func ReadStats(server ServerType, reset bool) (UserStatListTypes, error) {
 	r, err := query_stats(server, reset)
 	if err != nil {
 		return nil, err
 	}
-	stats := parse_stats(r)
+	stats := parse_stats(server, r)
 	return stats, nil
 }
