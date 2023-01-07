@@ -9,14 +9,15 @@ import (
 )
 
 type SettingsType struct {
-	V2fly_Api_Address string `env:"V2FLY_API_ADDRESS" env-required:"true"`
-	Influxdb_Url      string `env:"INFLUXDB_URL" env-required:"true"`
-	Influxdb_Org      string `env:"INFLUXDB_ORG" env-required:"true"`
-	Influxdb_Token    string `env:"INFLUXDB_TOKEN" env-required:"true"`
-	Influxdb_Bucket   string `env:"INFLUXDB_BUCKET" env-required:"true"`
-	Checkpoint_Path   string `env:"CHECKPOINT_PATH" env-default:"./storage/checkpoints"`
-	Update_Interval   int    `env:"UPDATE_INTERVAL" env-default:"5"`
-	Log_Level         string `env:"LOG_LEVEL" env-default:"warning"`
+	V2fly_Api_Address string            `env:"V2FLY_API_ADDRESS" env-required:"true"`
+	Influxdb_Url      string            `env:"INFLUXDB_URL" env-required:"true"`
+	Influxdb_Org      string            `env:"INFLUXDB_ORG" env-required:"true"`
+	Influxdb_Token    string            `env:"INFLUXDB_TOKEN" env-required:"true"`
+	Influxdb_Bucket   string            `env:"INFLUXDB_BUCKET" env-required:"true"`
+	Checkpoint_Path   string            `env:"CHECKPOINT_PATH" env-default:"./storage/checkpoints"`
+	Update_Interval   int               `env:"UPDATE_INTERVAL" env-default:"5"`
+	Influxdb_Tags     map[string]string `env:"INFLUXDB_TAGS" env-default:""`
+	Log_Level         string            `env:"LOG_LEVEL" env-default:"warning"`
 }
 
 func Config() SettingsType {

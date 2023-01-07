@@ -111,7 +111,7 @@ func files_to_influx() (int, error) {
 func run() {
 	cfg = config.Config()
 	panic_file_name = filepath.Join(cfg.Checkpoint_Path, "panic")
-	influx_server = stats2influx.InfluxServer{InfluxURI: cfg.Influxdb_Url, InfluxOrg: cfg.Influxdb_Org, InfluxToken: cfg.Influxdb_Token, InfluxBucket: cfg.Influxdb_Bucket}
+	influx_server = stats2influx.InfluxServer{InfluxURI: cfg.Influxdb_Url, InfluxOrg: cfg.Influxdb_Org, InfluxToken: cfg.Influxdb_Token, InfluxBucket: cfg.Influxdb_Bucket, InfluxTags: cfg.Influxdb_Tags}
 	sleeper := time.NewTicker(time.Second * time.Duration(cfg.Update_Interval))
 	for {
 		_, err := stat_to_file()

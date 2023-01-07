@@ -19,6 +19,7 @@ type InfluxServer struct {
 	InfluxToken  string
 	InfluxOrg    string
 	InfluxBucket string
+	InfluxTags   map[string]string
 }
 
 // ==================================
@@ -31,8 +32,12 @@ func Write(server InfluxServer, points grpc2stats.Stats) (int, error) {
 	writeAPI.EnableBatching()
 	count := 0
 	for _, v_ := range points {
+		tags := map[string]string{"user": v_.Username, "direction": string(v_.Direction)}
+		for k_, v_ := range server.InfluxTags {
+			tags[k_] = v_
+		}
 		p := influxdb2.NewPoint("bandwidth",
-			map[string]string{"user": v_.Username, "direction": string(v_.Direction)}, map[string]interface{}{"used": v_.Value}, time.Unix(v_.Time, 0))
+			tags, map[string]interface{}{"used": v_.Value}, time.Unix(v_.Time, 0))
 		log.WithField("data", fmt.Sprintf("%+v", p)).Debug("writing to influx")
 		err := writeAPI.WritePoint(context.Background(), p)
 		if err != nil {
