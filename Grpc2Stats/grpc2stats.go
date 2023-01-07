@@ -17,12 +17,20 @@ import (
 // ==================================
 // types
 // ==================================
+type Direction string
+
+const (
+	Downlink Direction = "downlink"
+	Uplink   Direction = "uplink"
+)
+
 type UserStat struct {
-	Downlink int64
-	Uplink   int64
-	Time     int64
+	Username  string
+	Time      int64
+	Direction Direction
+	Value     int64
 }
-type Stats map[string]UserStat
+type Stats []UserStat
 
 // ==================================
 // functions
@@ -49,22 +57,18 @@ func query_stats(server string, reset bool) (*command.QueryStatsResponse, error)
 }
 func parse_stats(r *command.QueryStatsResponse) Stats {
 	ct := time.Now().Unix()
-	stats := make(Stats)
+	stats := *new(Stats)
 	reg, _ := regexp.Compile("^.+>>>(.+?)>>>.+>>>(.+)$")
 	for _, s_ := range r.Stat {
+		usage := s_.Value
+		if usage == 0 {
+			continue
+		}
 		reg_res := reg.FindStringSubmatch(s_.Name)
-		u_ := reg_res[1]
-		t_ := reg_res[2]
-		entry, ok := stats[u_]
-		if !ok {
-			entry = UserStat{Time: ct}
-		}
-		if t_ == "downlink" {
-			entry.Downlink = s_.Value
-		} else if t_ == "uplink" {
-			entry.Uplink = s_.Value
-		}
-		stats[u_] = entry
+		u_ := reg_res[1]            // user email
+		t_ := Direction(reg_res[2]) // usage direction
+		entry := UserStat{Time: ct, Username: u_, Direction: t_, Value: usage}
+		stats = append(stats, entry)
 	}
 	log.WithField("data", fmt.Sprintf("%+v", stats)).Debug("parse user stat")
 	return stats

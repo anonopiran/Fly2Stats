@@ -21,3 +21,9 @@ storage/
 docker-compose.yaml
 
 .env
+
+test-download.sh
+
+__debug_bin
+
+app

@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -22,8 +21,13 @@ type SettingsType struct {
 
 func Config() SettingsType {
 	var cfg SettingsType
-	load_dot_env()
-	err := cleanenv.ReadEnv(&cfg)
+	// load_dot_env()
+	var err error = nil
+	if _, err = os.Stat(".env"); err == nil {
+		err = cleanenv.ReadConfig(".env", &cfg)
+	} else {
+		err = cleanenv.ReadEnv(&cfg)
+	}
 	if err != nil {
 		log.WithError(err).Fatalln("can not initiate configuration")
 	}
@@ -47,10 +51,4 @@ func Describe() {
 		log.WithError(err).Panic("can not generate description")
 	}
 	log.Println(help)
-}
-func load_dot_env() {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Info("no .env file found")
-	}
 }
