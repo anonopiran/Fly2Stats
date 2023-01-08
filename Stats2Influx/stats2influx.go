@@ -25,12 +25,12 @@ type InfluxServer struct {
 // ==================================
 // functions
 // ==================================
-func Write(server InfluxServer, points grpc2stats.UserStatListTypes) (int, error) {
+func Write(server InfluxServer, points grpc2stats.UserStatListTypes) ([]string, error) {
 	client := influxdb2.NewClient(server.InfluxURI, server.InfluxToken)
 	defer client.Close()
 	writeAPI := client.WriteAPIBlocking(server.InfluxOrg, server.InfluxBucket)
 	writeAPI.EnableBatching()
-	count := 0
+	updates := []string{}
 	for _, v_ := range points {
 		tags := map[string]string{"user": v_.Username, "direction": string(v_.Direction), "server_url": v_.ServerUri, "server_ip": v_.ServerIp}
 		for k_, v_ := range server.InfluxTags {
@@ -41,15 +41,15 @@ func Write(server InfluxServer, points grpc2stats.UserStatListTypes) (int, error
 		log.WithField("data", fmt.Sprintf("%+v", p)).Debug("writing to influx")
 		err := writeAPI.WritePoint(context.Background(), p)
 		if err != nil {
-			log.WithError(err).Error("could not write to influx db after %d writes\n", count)
-			return count, err
+			log.WithError(err).Error("could not write to influx db after %d writes\n", len(updates))
+			return updates, err
 		}
-		count += 1
+		updates = append(updates, v_.Username)
 	}
 	err := writeAPI.Flush(context.Background())
 	if err != nil {
-		log.WithError(err).Errorf("could not write to influx db after %d writes\n", count)
-		return count, err
+		log.WithError(err).Errorf("could not write to influx db after %d writes\n", len(updates))
+		return updates, err
 	}
-	return count, nil
+	return updates, nil
 }

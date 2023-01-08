@@ -16,13 +16,29 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-redis/redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
-var cfg config.SettingsType
-var influx_server stats2influx.InfluxServer
-var panic_file_name string
+var cfg = config.Config()
+var influx_server = stats2influx.InfluxServer{InfluxURI: cfg.Influxdb_Url, InfluxOrg: cfg.Influxdb_Org, InfluxToken: cfg.Influxdb_Token, InfluxBucket: cfg.Influxdb_Bucket, InfluxTags: cfg.Influxdb_Tags}
+var panic_file_name = filepath.Join(cfg.Checkpoint_Path, "panic")
+var redis_available = false
+var redis_client redis.Client
 
+func redis_setup() {
+	if cfg.Redis_Url != "" {
+		redis_opt, err := redis.ParseURL(cfg.Redis_Url)
+		if err != nil {
+			log.WithError(err).WithField("uri", cfg.Redis_Url).Panicf("redis uri is defined but nit understood")
+		}
+		redis_client = *redis.NewClient(redis_opt)
+		redis_available = true
+	} else {
+		log.Warn("redis is not enabled")
+	}
+
+}
 func resolve_v2fly() []grpc2stats.ServerType {
 	servers := []grpc2stats.ServerType{}
 	for _, srv := range cfg.V2fly_Api_Address {
@@ -100,13 +116,13 @@ func stat_to_file() {
 		log_.Infof("write %d records to file", len(stats))
 	}
 }
-func files_to_influx() (int, error) {
+func files_to_influx() ([]string, error) {
+	updates_total := []string{}
 	files, err := os.ReadDir(cfg.Checkpoint_Path)
 	if err != nil {
 		log.WithError(err).Errorf("can not read checkpoint files at %n", cfg.Checkpoint_Path)
-		return 0, err
+		return updates_total, err
 	}
-	cnt_total := 0
 	for _, f_ := range files {
 		if !strings.HasSuffix(f_.Name(), ".json") {
 			continue
@@ -123,8 +139,8 @@ func files_to_influx() (int, error) {
 			log.WithError(err).Error("can not parse json file at %s\n", f_path)
 			continue
 		}
-		cnt, err := stats2influx.Write(influx_server, f_data)
-		cnt_total += cnt
+		updates, err := stats2influx.Write(influx_server, f_data)
+		updates_total = append(updates_total, updates...)
 		if err != nil {
 			log.WithError(err).Error("errors occured while writing to influx. keeping checkpoint file ...")
 			continue
@@ -136,18 +152,30 @@ func files_to_influx() (int, error) {
 			continue
 		}
 	}
-	return cnt_total, nil
+	updates_total_keys := make(map[string]bool)
+	updates_total_unique := []string{}
+	for _, entry := range updates_total {
+		if _, value := updates_total_keys[entry]; !value {
+			updates_total_keys[entry] = true
+			updates_total_unique = append(updates_total_unique, entry)
+		}
+	}
+	return updates_total_unique, nil
 }
 func run() {
-	cfg = config.Config()
-	panic_file_name = filepath.Join(cfg.Checkpoint_Path, "panic")
-	influx_server = stats2influx.InfluxServer{InfluxURI: cfg.Influxdb_Url, InfluxOrg: cfg.Influxdb_Org, InfluxToken: cfg.Influxdb_Token, InfluxBucket: cfg.Influxdb_Bucket, InfluxTags: cfg.Influxdb_Tags}
+	redis_setup()
 	sleeper := time.NewTicker(time.Second * time.Duration(cfg.Update_Interval))
 	for {
 		stat_to_file()
-		count, _ := files_to_influx()
-		f_ := log.Fields{"sleep": cfg.Update_Interval, "count": count}
+		updates, _ := files_to_influx()
+		f_ := log.Fields{"sleep": cfg.Update_Interval, "count": len(updates)}
 		log.WithFields(f_).Info("stats saved to influx")
+		if redis_available && len(updates) > 0 {
+			update_json, _ := json.Marshal(updates)
+			if err := redis_client.Publish(context.Background(), "v2fly-update-stats", update_json).Err(); err != nil {
+				log.WithError(err).WithField("data", update_json).Error("error while publishing state update event")
+			}
+		}
 		<-sleeper.C
 	}
 }

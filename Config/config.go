@@ -14,9 +14,10 @@ type SettingsType struct {
 	Influxdb_Org      string            `env:"INFLUXDB_ORG" env-required:"true"`
 	Influxdb_Token    string            `env:"INFLUXDB_TOKEN" env-required:"true"`
 	Influxdb_Bucket   string            `env:"INFLUXDB_BUCKET" env-required:"true"`
+	Influxdb_Tags     map[string]string `env:"INFLUXDB_TAGS" env-default:""`
+	Redis_Url         string            `env:"REDIS_URL" env-default:""`
 	Checkpoint_Path   string            `env:"CHECKPOINT_PATH" env-default:"./storage/checkpoints"`
 	Update_Interval   int               `env:"UPDATE_INTERVAL" env-default:"5"`
-	Influxdb_Tags     map[string]string `env:"INFLUXDB_TAGS" env-default:""`
 	Log_Level         string            `env:"LOG_LEVEL" env-default:"warning"`
 }
 
