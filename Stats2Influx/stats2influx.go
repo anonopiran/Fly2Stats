@@ -1,9 +1,11 @@
 package stats2influx
 
 import (
-	grpc2stats "Fly2Stats/Grpc2Stats"
+	config "Fly2Stats/Config"
+	u2s "Fly2Stats/Upstream2Stats"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -11,29 +13,17 @@ import (
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 )
 
-// ==================================
-// types
-// ==================================
-type InfluxServer struct {
-	InfluxURI    string
-	InfluxToken  string
-	InfluxOrg    string
-	InfluxBucket string
-	InfluxTags   map[string]string
-}
-
-// ==================================
-// functions
-// ==================================
-func Write(server InfluxServer, points grpc2stats.UserStatListTypes) ([]string, error) {
-	client := influxdb2.NewClient(server.InfluxURI, server.InfluxToken)
+func Write(points u2s.UserStatListTypes) ([]string, error) {
+	server := config.Config.InfluxdbUrl.AsUrl()
+	token, _ := server.User.Password()
+	client := influxdb2.NewClient(server.Scheme+"://"+server.Host, token)
 	defer client.Close()
-	writeAPI := client.WriteAPIBlocking(server.InfluxOrg, server.InfluxBucket)
+	writeAPI := client.WriteAPIBlocking(server.User.Username(), strings.Trim(server.Path, "/"))
 	writeAPI.EnableBatching()
 	updates := []string{}
 	for _, v_ := range points {
 		tags := map[string]string{"user": v_.Username, "direction": string(v_.Direction), "server_url": v_.ServerUri, "server_ip": v_.ServerIp}
-		for k_, v_ := range server.InfluxTags {
+		for k_, v_ := range config.Config.InfluxdbTags {
 			tags[k_] = v_
 		}
 		p := influxdb2.NewPoint("bandwidth",

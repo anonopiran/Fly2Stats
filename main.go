@@ -2,17 +2,16 @@ package main
 
 import (
 	config "Fly2Stats/Config"
-	grpc2stats "Fly2Stats/Grpc2Stats"
+	faillock "Fly2Stats/FailLock"
 	stats2influx "Fly2Stats/Stats2Influx"
+	"fmt"
+
+	u2s "Fly2Stats/Upstream2Stats"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
-	"fmt"
-	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,131 +19,69 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var cfg = config.Config()
-var influx_server = stats2influx.InfluxServer{InfluxURI: cfg.Influxdb_Url, InfluxOrg: cfg.Influxdb_Org, InfluxToken: cfg.Influxdb_Token, InfluxBucket: cfg.Influxdb_Bucket, InfluxTags: cfg.Influxdb_Tags}
-var panic_file_name = filepath.Join(cfg.Checkpoint_Path, "panic")
-var redis_available = false
-var redis_client redis.Client
+var cfg config.SettingsType
+var redisClient redis.Client
+var redisActivated bool
 
-func redis_setup() {
-	if cfg.Redis_Url != "" {
-		redis_opt, err := redis.ParseURL(cfg.Redis_Url)
+func Stats2File() {
+	faillock.TestUp()
+	for _, trg := range config.Config.V2flyApiAddress {
+		logWithTarget := log.WithField("target", trg)
+		res, err := u2s.ResolveV2FlyServer(trg.AsUrl())
 		if err != nil {
-			log.WithError(err).WithField("uri", cfg.Redis_Url).Panicf("redis uri is defined but nit understood")
-		}
-		redis_client = *redis.NewClient(redis_opt)
-		redis_available = true
-	} else {
-		log.Warn("redis is not enabled")
-	}
-
-}
-func resolve_v2fly() []grpc2stats.ServerType {
-	servers := []grpc2stats.ServerType{}
-	for _, srv := range cfg.V2fly_Api_Address {
-		x := strings.Split(srv, ":")
-		host := x[0]
-		port, err := strconv.ParseInt(x[1], 10, 0)
-		if err != nil {
-			log.WithError(err).Panicf("can not parse port %s", srv)
-		}
-		ips, err := net.DefaultResolver.LookupIP(context.Background(), "ip4", host)
-		if err != nil {
-			log.WithError(err).Errorf("can not resolve host %s. skiping...", host)
+			logWithTarget.WithError(err).Error("error while resolving v2fly server")
 			continue
 		}
-		for _, ip_ := range ips {
-			servers = append(servers, grpc2stats.ServerType{Ip: ip_, Uri: host, Port: port})
+		for _, srv := range res {
+			logWithServer := logWithTarget.WithField("server", srv)
+			stats, err := u2s.ReadUpstream(&srv, true)
+			if err != nil {
+				logWithServer.WithError(err).Error("error while reading stats")
+				continue
+			}
+			if len(stats) == 0 {
+				logWithServer.Debug("nothing to write")
+				continue
+			}
+			filePath := filepath.Join(cfg.CheckpointPath.AsString(), fmt.Sprintf("checkpoint-%v-%s-%s.json", time.Now().Unix(), srv.Uri, srv.Ip))
+			err = stats.SaveJson(filePath)
+			if err != nil {
+				logWithServer.WithField("stats", stats).Error("fatal error while saving stats")
+				faillock.LockAndPan(err)
+			}
+			logWithServer.WithField("count", len(stats)).Info("stats saved to file")
 		}
-	}
-	log.Infof("discovered %d services", len(servers))
-	log.Debugf("%v", servers)
-	return servers
-}
-func panic_file(panpan bool, nolog bool, err error) {
-	f, _err := os.Create(panic_file_name)
-	var e_ func(string, ...interface{})
-	if panpan {
-		e_ = log.WithError(_err).Panicf
-	} else {
-		e_ = log.WithError(_err).Errorf
-	}
-	if _err != nil {
-		log.WithError(_err).Panicf("can not open panic file at %s", panic_file_name)
-	}
-	defer f.Close()
-	f.WriteString(err.Error())
-	if !nolog {
-		e_(err.Error())
-
 	}
 }
-func stat_to_file() {
-	if _, err := os.Stat(panic_file_name); err == nil {
-		log.Panicf("panic file exists at %s", panic_file_name)
-	}
-	panic_file(false, true, errors.New("test"))
-	err := os.Remove(panic_file_name)
-	if err != nil {
-		log.WithError(err).Panicf("can not remove test panic file at %s", panic_file_name)
-	}
-	for _, srv_ := range resolve_v2fly() {
-		stats, err := grpc2stats.ReadStats(srv_, true)
-		log_ := log.WithField("server", srv_)
-		if err != nil {
-			log_.WithError(err).Error("error reading stats from v2fly")
-			continue
-		}
-		if len(stats) == 0 {
-			log_.Info("nothing to write")
-			continue
-		}
-		file_name := filepath.Join(cfg.Checkpoint_Path, fmt.Sprintf("checkpoint-%v-%s-%s.json", time.Now().Unix(), srv_.Uri, srv_.Ip))
-		f, err := os.Create(file_name)
-		if err != nil {
-			panic_file(true, false, err)
-		}
-		defer f.Close()
-		jstats, err := json.Marshal(stats)
-		if err != nil {
-			panic_file(true, false, err)
-		}
-		_, err = f.Write(jstats)
-		if err != nil {
-			panic_file(true, false, err)
-		}
-		log_.Infof("write %d records to file", len(stats))
-	}
-}
-func files_to_influx() ([]string, error) {
+func Files2Influx() []string {
 	updates_total := []string{}
-	files, err := os.ReadDir(cfg.Checkpoint_Path)
+	files, err := os.ReadDir(cfg.CheckpointPath.AsString())
 	if err != nil {
-		log.WithError(err).Errorf("can not read checkpoint files at %n", cfg.Checkpoint_Path)
-		return updates_total, err
+		log.WithError(err).Errorf("can not read checkpoint files at %n", cfg.CheckpointPath)
+		return updates_total
 	}
 	for _, f_ := range files {
 		if !strings.HasSuffix(f_.Name(), ".json") {
 			continue
 		}
-		f_path := filepath.Join(cfg.Checkpoint_Path, f_.Name())
+		f_path := filepath.Join(cfg.CheckpointPath.AsString(), f_.Name())
 		f_file, err := os.ReadFile(f_path)
 		if err != nil {
 			log.WithError(err).Errorf("can not read json file at %s\n", f_path)
 			continue
 		}
-		f_data := *new(grpc2stats.UserStatListTypes)
+		f_data := *new(u2s.UserStatListTypes)
 		err = json.Unmarshal(f_file, &f_data)
 		if err != nil {
 			log.WithError(err).Error("can not parse json file at %s\n", f_path)
 			continue
 		}
-		updates, err := stats2influx.Write(influx_server, f_data)
-		updates_total = append(updates_total, updates...)
+		updates, err := stats2influx.Write(f_data)
 		if err != nil {
 			log.WithError(err).Error("errors occured while writing to influx. keeping checkpoint file ...")
 			continue
 		}
+		updates_total = append(updates_total, updates...)
 		log.WithField("file", f_path).Debug("removing file")
 		err = os.Remove(f_path)
 		if err != nil {
@@ -160,27 +97,40 @@ func files_to_influx() ([]string, error) {
 			updates_total_unique = append(updates_total_unique, entry)
 		}
 	}
-	return updates_total_unique, nil
+	if len(updates_total_unique) > 0 {
+		log.WithField("count", len(updates_total_unique)).Info("stats saved to influx")
+	}
+	return updates_total_unique
+}
+func Notify(updates []string) error {
+	if redisActivated && len(updates) > 0 {
+		update_json, _ := json.Marshal(updates)
+		if err := redisClient.Publish(context.Background(), "v2fly-update-stats", update_json).Err(); err != nil {
+			log.WithError(err).WithField("data", update_json).Error("error while publishing state update event")
+			return err
+		}
+	}
+	return nil
 }
 func run() {
-	redis_setup()
-	sleeper := time.NewTicker(time.Second * time.Duration(cfg.Update_Interval))
+	sleeper := time.NewTicker(time.Second * time.Duration(cfg.UpdateInterval))
 	for {
-		stat_to_file()
-		updates, _ := files_to_influx()
-		f_ := log.Fields{"sleep": cfg.Update_Interval, "count": len(updates)}
-		log.WithFields(f_).Info("stats saved to influx")
-		if redis_available && len(updates) > 0 {
-			update_json, _ := json.Marshal(updates)
-			if err := redis_client.Publish(context.Background(), "v2fly-update-stats", update_json).Err(); err != nil {
-				log.WithError(err).WithField("data", update_json).Error("error while publishing state update event")
-			}
-		}
+		Stats2File()
+		updates := Files2Influx()
+		Notify(updates)
 		<-sleeper.C
 	}
 }
 func help() {
 	config.Describe()
+}
+func init() {
+	cfg = config.Config
+	redisActivated = (cfg.RedisUrl != "")
+	if redisActivated {
+		rdsOpts := cfg.RedisUrl.AsOpts()
+		redisClient = *redis.NewClient(&rdsOpts)
+	}
 }
 func main() {
 	f_help := flag.Bool("env", false, "list available env variables")
