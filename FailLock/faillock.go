@@ -11,8 +11,8 @@ import (
 
 const LockFileName = "fail.lock"
 
-var LockDir = config.Config.CheckpointPath.AsString()
-var LockFilePath = filepath.Join(LockDir, LockFileName)
+var LockDir string
+var LockFilePath string
 
 func Lockup(err error) error {
 	file, createErr := os.Create(LockFilePath)
@@ -49,5 +49,8 @@ func TestUp() {
 	}
 }
 func init() {
+	cfg := config.Config()
+	LockDir = cfg.CheckpointPath.AsString()
+	LockFilePath = filepath.Join(LockDir, LockFileName)
 	Check()
 }

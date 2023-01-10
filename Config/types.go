@@ -41,6 +41,8 @@ func (f *V2rayUrlType) AsUrl() url.URL {
 	u, _ := url.Parse(string(*f))
 	return *u
 }
+
+// .............
 func (f *PathType) SetValue(s string) error {
 	err := os.MkdirAll(s, os.ModePerm)
 	if err != nil {
@@ -50,7 +52,6 @@ func (f *PathType) SetValue(s string) error {
 	*f = PathType(s)
 	return nil
 }
-
 func (f *LogLevelType) SetValue(s string) error {
 	ll, err := log.ParseLevel(s)
 	if err != nil {
@@ -59,7 +60,6 @@ func (f *LogLevelType) SetValue(s string) error {
 	}
 	log.SetLevel(ll)
 	// log.SetReportCaller(true)
-
 	*f = LogLevelType(s)
 	return nil
 }

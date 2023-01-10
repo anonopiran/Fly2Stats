@@ -8,8 +8,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var Config SettingsType
-
 func Describe() {
 	var cfg SettingsType
 	help, err := cleanenv.GetDescription(&cfg, nil)
@@ -19,17 +17,19 @@ func Describe() {
 	log.Println(help)
 }
 
-func init() {
+func Config() SettingsType {
+	var cfg SettingsType
 	var err error = nil
 	if _, err_file := os.Stat(".env"); err_file == nil {
-		err = cleanenv.ReadConfig(".env", &Config)
+		err = cleanenv.ReadConfig(".env", &cfg)
 		log.Info("found .env file")
 	} else {
-		err = cleanenv.ReadEnv(&Config)
+		err = cleanenv.ReadEnv(&cfg)
 		log.Info("no .env file found")
 	}
 	if err != nil {
 		log.WithError(err).Panic("can not initiate configuration")
 	}
-	log.WithField("data", fmt.Sprintf("%+v", Config)).Debug("Parsed Configuration")
+	log.WithField("data", fmt.Sprintf("%+v", cfg)).Debug("Parsed Configuration")
+	return cfg
 }

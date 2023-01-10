@@ -25,7 +25,8 @@ var redisActivated bool
 
 func Stats2File() {
 	faillock.TestUp()
-	for _, trg := range config.Config.V2flyApiAddress {
+	cfg := config.Config()
+	for _, trg := range cfg.V2flyApiAddress {
 		logWithTarget := log.WithField("target", trg)
 		res, err := u2s.ResolveV2FlyServer(trg.AsUrl())
 		if err != nil {
@@ -125,7 +126,7 @@ func help() {
 	config.Describe()
 }
 func init() {
-	cfg = config.Config
+	cfg = config.Config()
 	redisActivated = (cfg.RedisUrl != "")
 	if redisActivated {
 		rdsOpts := cfg.RedisUrl.AsOpts()

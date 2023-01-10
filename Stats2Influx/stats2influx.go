@@ -14,7 +14,8 @@ import (
 )
 
 func Write(points u2s.UserStatListTypes) ([]string, error) {
-	server := config.Config.InfluxdbUrl.AsUrl()
+	cfg := config.Config()
+	server := cfg.InfluxdbUrl.AsUrl()
 	token, _ := server.User.Password()
 	client := influxdb2.NewClient(server.Scheme+"://"+server.Host, token)
 	defer client.Close()
@@ -23,7 +24,7 @@ func Write(points u2s.UserStatListTypes) ([]string, error) {
 	updates := []string{}
 	for _, v_ := range points {
 		tags := map[string]string{"user": v_.Username, "direction": string(v_.Direction), "server_url": v_.ServerUri, "server_ip": v_.ServerIp}
-		for k_, v_ := range config.Config.InfluxdbTags {
+		for k_, v_ := range cfg.InfluxdbTags {
 			tags[k_] = v_
 		}
 		p := influxdb2.NewPoint("bandwidth",
