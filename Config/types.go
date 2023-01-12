@@ -21,6 +21,7 @@ type SettingsType struct {
 	V2flyApiAddress []V2rayUrlType    `env:"V2FLY_API_ADDRESS" env-required:"true"`
 	InfluxdbTags    map[string]string `env:"INFLUXDB_TAGS" env-default:""`
 	RedisUrl        RedisUrlType      `env:"REDIS_URL" env-default:""`
+	PubUpdateTopic  string            `env:"PUB_UPDATE_TOPIC" env-default:"usage:update"`
 	CheckpointPath  PathType          `env:"CHECKPOINT_PATH" env-default:"./storage/checkpoints"`
 	UpdateInterval  int               `env:"UPDATE_INTERVAL" env-default:"5"`
 	LogLevel        LogLevelType      `env:"LOG_LEVEL" env-default:"warning"`

@@ -106,7 +106,7 @@ func Files2Influx() []string {
 func Notify(updates []string) error {
 	if redisActivated && len(updates) > 0 {
 		update_json, _ := json.Marshal(updates)
-		if err := redisClient.Publish(context.Background(), "v2fly-update-stats", update_json).Err(); err != nil {
+		if err := redisClient.Publish(context.Background(), cfg.PubUpdateTopic, update_json).Err(); err != nil {
 			log.WithError(err).WithField("data", update_json).Error("error while publishing state update event")
 			return err
 		}
