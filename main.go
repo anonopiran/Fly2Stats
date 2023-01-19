@@ -6,8 +6,8 @@ import (
 	stats2influx "Fly2Stats/Stats2Influx"
 	"fmt"
 
+	notify "Fly2Stats/Notify"
 	u2s "Fly2Stats/Upstream2Stats"
-	"context"
 	"encoding/json"
 	"flag"
 	"os"
@@ -15,12 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
 var cfg config.SettingsType
-var redisClient redis.Client
 var redisActivated bool
 
 func Stats2File() {
@@ -103,22 +101,12 @@ func Files2Influx() []string {
 	}
 	return updates_total_unique
 }
-func Notify(updates []string) error {
-	if redisActivated && len(updates) > 0 {
-		update_json, _ := json.Marshal(updates)
-		if err := redisClient.Publish(context.Background(), cfg.PubUpdateTopic, update_json).Err(); err != nil {
-			log.WithError(err).WithField("data", update_json).Error("error while publishing state update event")
-			return err
-		}
-	}
-	return nil
-}
 func run() {
 	sleeper := time.NewTicker(time.Second * time.Duration(cfg.UpdateInterval))
 	for {
 		Stats2File()
 		updates := Files2Influx()
-		Notify(updates)
+		notify.Notify(updates)
 		<-sleeper.C
 	}
 }
@@ -126,12 +114,7 @@ func help() {
 	config.Describe()
 }
 func init() {
-	cfg = config.Config()
-	redisActivated = (cfg.RedisUrl != "")
-	if redisActivated {
-		rdsOpts := cfg.RedisUrl.AsOpts()
-		redisClient = *redis.NewClient(&rdsOpts)
-	}
+	cfg = *config.Config()
 }
 func main() {
 	f_help := flag.Bool("env", false, "list available env variables")

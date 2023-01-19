@@ -6,12 +6,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-redis/redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
 type PathType string
-type RedisUrlType string
+type RabbitUrlType string
 type InfluxUrlType string
 type V2rayUrlType string
 type LogLevelType string
@@ -20,8 +19,8 @@ type SettingsType struct {
 	InfluxdbUrl     InfluxUrlType     `env:"INFLUXDB_URL" env-required:"true"`
 	V2flyApiAddress []V2rayUrlType    `env:"V2FLY_API_ADDRESS" env-required:"true"`
 	InfluxdbTags    map[string]string `env:"INFLUXDB_TAGS" env-default:""`
-	RedisUrl        RedisUrlType      `env:"REDIS_URL" env-default:""`
-	PubUpdateTopic  string            `env:"PUB_UPDATE_TOPIC" env-default:"usage:update"`
+	RabbitUrl       RabbitUrlType     `env:"RABBIT_URL" env-default:""`
+	RabbitExchange  string            `env:"RABBIT_EXCHANGE" env-default:"v2fly-usage"`
 	CheckpointPath  PathType          `env:"CHECKPOINT_PATH" env-default:"./storage/checkpoints"`
 	UpdateInterval  int               `env:"UPDATE_INTERVAL" env-default:"5"`
 	LogLevel        LogLevelType      `env:"LOG_LEVEL" env-default:"warning"`
@@ -30,9 +29,8 @@ type SettingsType struct {
 func (f *PathType) AsString() string {
 	return string(*f)
 }
-func (f *RedisUrlType) AsOpts() redis.Options {
-	opt, _ := redis.ParseURL(string(*f))
-	return *opt
+func (f *RabbitUrlType) AsString() string {
+	return string(*f)
 }
 func (f *InfluxUrlType) AsUrl() url.URL {
 	u, _ := url.Parse(string(*f))
@@ -64,68 +62,78 @@ func (f *LogLevelType) SetValue(s string) error {
 	*f = LogLevelType(s)
 	return nil
 }
-func (f *RedisUrlType) SetValue(s string) error {
+func (f *RabbitUrlType) SetValue(s string) error {
 	if s == "" {
-		log.Warning("REDIS_URL not defined")
-
+		log.Warning("RABBIT_URL not defined")
 	} else {
-		_, err := redis.ParseURL(s)
-		if err != nil {
-			log.WithField("value", s).WithError(err).Error("error while parsing config")
-			return err
+		e := validateUrl(&s, []string{"amqp"}, true, true, true, true)
+		if e != nil {
+			return e
 		}
-		*f = RedisUrlType(s)
 	}
+	*f = RabbitUrlType(s)
 	return nil
 }
 func (f *InfluxUrlType) SetValue(s string) error {
-	LogWithRaw := log.WithField("value", s)
-	u, err := url.Parse(s)
-	if err != nil {
-		LogWithRaw.WithError(err).Error("error while parsing config")
-		return err
-	}
-	if u.Host == "" || u.Scheme == "" {
-		e := errors.New("scheme of host not provided")
-		LogWithRaw.Error(e)
-		return e
-	}
-	if u.User.Username() == "" {
-		e := errors.New("org not provided")
-		LogWithRaw.Error(e)
-		return e
-	}
-	token, _ := u.User.Password()
-	if token == "" {
-		e := errors.New("token not provided")
-		LogWithRaw.Error(e)
-		return e
-	}
-	if strings.Trim(u.Path, "/") == "" {
-		e := errors.New("bucket not provided")
-		LogWithRaw.Error(e)
+	e := validateUrl(&s, []string{"http", "https"}, true, true, true, true)
+	if e != nil {
 		return e
 	}
 	*f = InfluxUrlType(s)
 	return nil
 }
 func (f *V2rayUrlType) SetValue(s string) error {
+	e := validateUrl(&s, []string{"grpc"}, false, false, true, false)
+	if e != nil {
+		return e
+	}
+	*f = V2rayUrlType(s)
+	return nil
+}
+
+func validateUrl(s *string, scheme_req []string, user_req bool, passwd_req bool, port_req bool, path_req bool) error {
 	LogWithRaw := log.WithField("value", s)
-	u, err := url.Parse(s)
+	u, err := url.Parse(*s)
 	if err != nil {
 		LogWithRaw.WithError(err).Error("error while parsing config")
 		return err
 	}
-	if u.Hostname() == "" {
-		e := errors.New("hostname not provided")
+	_scheme_ok := false
+	for _, s := range scheme_req {
+		if u.Scheme == s {
+			_scheme_ok = true
+		}
+	}
+	if !_scheme_ok {
+		e := errors.New("scheme is not acceptable")
+		LogWithRaw.WithField("accepts", scheme_req).Error(e)
+		return e
+	}
+	if u.Host == "" {
+		e := errors.New("host not provided")
 		LogWithRaw.Error(e)
 		return e
 	}
-	if u.Port() == "" {
+	if u.User.Username() == "" && user_req {
+		e := errors.New("user not provided")
+		LogWithRaw.Error(e)
+		return e
+	}
+	token, _ := u.User.Password()
+	if token == "" && passwd_req {
+		e := errors.New("password not provided")
+		LogWithRaw.Error(e)
+		return e
+	}
+	if u.Port() == "" && port_req {
 		e := errors.New("port not provided")
 		LogWithRaw.Error(e)
 		return e
 	}
-	*f = V2rayUrlType(s)
+	if strings.Trim(u.Path, "/") == "" && path_req {
+		e := errors.New("path not provided")
+		LogWithRaw.Error(e)
+		return e
+	}
 	return nil
 }
