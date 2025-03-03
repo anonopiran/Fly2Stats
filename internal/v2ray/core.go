@@ -76,8 +76,8 @@ func NewServer(srv config.UpstreamUrlType) (*UpServer, error) {
 	switch srv.ServerType {
 	case config.V2FLY_SRV:
 		upSrv = NewV2flyServer(srv)
-	// case config.XRAY_SRV:
-	// upSrv = UpServer{Address: srv, IServer: &XrayServer{}}
+	case config.XRAY_SRV:
+		upSrv = NewXrayServer(srv)
 	default:
 		return nil, ErrUnknownServerType(srv)
 	}
