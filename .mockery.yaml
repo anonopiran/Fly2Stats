@@ -6,6 +6,11 @@ packages:
     config:
       recursive: true
       all: true
+  github.com/xtls/xray-core/app/stats/command:
+    # place your package-specific config here
+    config:
+      recursive: true
+      all: true
     # interfaces:
     #   # select the interfaces you want mocked
     #   Foo:

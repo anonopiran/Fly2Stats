@@ -27,8 +27,6 @@ type IStat interface {
 type IStatsRequest interface {
 	Descriptor() ([]byte, []int)
 	GetPattern() string
-	GetPatterns() []string
-	GetRegexp() bool
 	GetReset_() bool
 	ProtoMessage()
 	ProtoReflect() protoreflect.Message
