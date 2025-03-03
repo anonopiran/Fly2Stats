@@ -1,0 +1,13 @@
+with-expecter: true
+log-level: debug
+packages:
+  github.com/v2fly/v2ray-core/v5/app/stats/command:
+    # place your package-specific config here
+    config:
+      recursive: true
+      all: true
+    # interfaces:
+    #   # select the interfaces you want mocked
+    #   Foo:
+    #     # Modify package-level config for this specific interface (if applicable)
+    #     config:
