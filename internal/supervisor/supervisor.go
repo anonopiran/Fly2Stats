@@ -112,6 +112,8 @@ func (sup *Supervisor) Query() error {
 	}
 	wg := sync.WaitGroup{}
 	ctx := context.Background()
+	ctx, cl := context.WithTimeout(ctx, 5*time.Second)
+	defer cl()
 	if sup.isLocked() {
 		return fmt.Errorf("lock file exists")
 	}
