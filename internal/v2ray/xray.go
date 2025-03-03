@@ -34,7 +34,7 @@ func (a *xrayStatsServiceClientAdapter) QueryStats(ctx context.Context, in IStat
 
 // ...
 func (v *XrayServerType) NewStatRequest() (IStatsRequest, error) {
-	req := command.QueryStatsRequest{Reset_: true, Pattern: "user.+"}
+	req := command.QueryStatsRequest{Reset_: true, Pattern: "user"}
 	return &req, nil
 }
 func (v *XrayServerType) ParseStats(istat []IStat) ([]UserStatType, error) {

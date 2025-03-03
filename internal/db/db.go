@@ -29,16 +29,13 @@ func LoadAllRecords(dir string) ([]*StatRecordType, error) {
 			ll.WithError(err).Error("can not read checkpoint file. skip ...")
 			continue
 		}
-		f_data := []StatRecordType{}
+		f_data := StatRecordType{}
 		err = json.Unmarshal(f_file, &f_data)
 		if err != nil {
 			ll.WithError(err).Error("can not parse checkpoint file. skip ...")
 			continue
 		}
-		for _, d := range f_data {
-			d.file = f_path
-			allRecords = append(allRecords, &d)
-		}
+		allRecords = append(allRecords, &f_data)
 	}
 	return allRecords, nil
 }
