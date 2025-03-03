@@ -117,7 +117,9 @@ func (sup *Supervisor) Query() error {
 	if sup.isLocked() {
 		return fmt.Errorf("lock file exists")
 	}
+	logrus.Debugf("servers to query: %+v", dsList)
 	for _, dSrv := range dsList {
+		dSrv := dSrv
 		wg.Add(1)
 		go func(_dSrv *DownServerType) {
 			defer wg.Done()
@@ -128,6 +130,7 @@ func (sup *Supervisor) Query() error {
 				ll.WithError(err).Error("can not dial down server")
 				return
 			}
+			ll.Debug("quering")
 			_dSrvStatList, err := _uSrv.GetStats(ctx, conn)
 			if err != nil {
 				ll.WithError(err).Error("can not query down server stats. locking ...")
@@ -165,6 +168,7 @@ func (sup *Supervisor) Start() {
 	defer sleeper.Stop()
 	for {
 		sup.ServiceDiscovery()
+		// sup.logger(nil).WithField("data", sup).Debug("current upservers")
 		sup.RunOnce()
 		<-sleeper.C
 	}
