@@ -35,7 +35,7 @@ func (s *StatRecordType) AsInflux(ExtraTags map[string]string) *influxdb2write.P
 	return p
 }
 func (s *StatRecordType) ToFile(dir string) error {
-	name := fmt.Sprintf("checkpoint-%s-%s-%d-%s-%s.json", s.Username, s.Direction, s.Time, s.ServerUri, s.ServerIp)
+	name := fmt.Sprintf("checkpoint-%s-%s-%d-%s.json", s.Username, s.Direction, s.Time, s.ServerIp)
 	f, err := os.Create(filepath.Join(dir, name))
 	if err != nil {
 		return fmt.Errorf("can not create checkpoint file: %s", err)
