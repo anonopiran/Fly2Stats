@@ -163,6 +163,7 @@ func (sup *Supervisor) Start() {
 	defer sleeper.Stop()
 	for {
 		sup.ServiceDiscovery()
+		sup.RunOnce()
 		<-sleeper.C
 	}
 }
